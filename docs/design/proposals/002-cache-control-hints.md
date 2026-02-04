@@ -22,12 +22,9 @@ portable code, gateways translate to provider-specific behavior.
 ## Motivation
 
 While Proposal 001's `caching: "auto"` covers the common case, some applications
-need finer control:
-
-- **TTL control** — "Keep this cached for the session" vs "cache briefly"
-- **Precise breakpoints** — "Cache exactly this content, not that"
-- **Named caches** — Reuse caches across requests (Gemini's model)
-- **Write observability** — Know when cache was populated vs hit
+need finer control: TTL selection (session-length vs brief), precise breakpoints
+(cache exactly this content), named caches for cross-request reuse, or write
+observability (distinguish cache hits from population).
 
 This proposal provides these capabilities while maintaining portability.
 
@@ -132,14 +129,16 @@ cache population (`cache_write_tokens > 0`).
 
 ## Conformance
 
-**Gateways:**
+Gateways:
+
 - MUST accept all fields without error
 - SHOULD apply hints when the provider supports them
 - MAY silently ignore hints the provider doesn't support
 - MUST report `cached_tokens` when available
 - SHOULD report `cache_write_tokens` when available
 
-**Clients:**
+Clients:
+
 - SHOULD NOT depend on hints being honored
 - SHOULD use `cached_tokens` / `cache_write_tokens` for observability
 - MAY use `cached_content` knowing it's provider-specific
@@ -162,9 +161,9 @@ when they have specific requirements that justify the complexity.
 
 ## Open Questions
 
-1. **TTL interaction with `cached_content`** — If both specify TTL, which wins?
-2. **Maximum breakpoints** — Should the spec define a minimum that gateways must support?
-3. **Cache key stability** — Should we document content-addressed invalidation behavior?
+1. If both `cached_content` and `caching` specify TTL, which wins?
+2. Should the spec define a minimum number of breakpoints gateways must support?
+3. Should we document content-addressed cache invalidation behavior?
 
 ## References
 
