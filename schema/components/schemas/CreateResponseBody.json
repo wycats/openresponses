@@ -324,7 +324,7 @@
       "anyOf": [
         {
           "type": "string",
-          "description": "Reference to a named cache object. When specified, the referenced cache content acts as an implicit prefix to the request. The cache MUST exist and be accessible. This field is reserved for providers that support named cache objects (e.g., Gemini). Providers that only support content-addressed caching SHOULD return an error or ignore this field."
+          "description": "Reference to a named cache object. When specified, the referenced cache content acts as an implicit prefix to the request. The cache MUST exist and be accessible. Providers that do not support named caches MUST return an error when this field is provided."
         },
         {
           "type": "null"

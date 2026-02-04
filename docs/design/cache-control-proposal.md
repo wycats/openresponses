@@ -36,7 +36,7 @@ The specification defines guarantees in terms of observable outcomes (cache hits
 
 ### 3. Semantic Categories with Normative Bounds
 
-Duration hints use semantic categories (`ephemeral`, `session`) with specified minimum durations, following the CLDR/Intl pattern of abstracting locale-specific implementations behind normative behavior bounds.
+Duration hints use semantic categories (`short`, `medium`, `long`) with specified minimum durations, following the CLDR/Intl pattern of abstracting locale-specific implementations behind normative behavior bounds.
 
 ---
 
@@ -47,30 +47,22 @@ Duration hints use semantic categories (`ephemeral`, `session`) with specified m
 ```typescript
 interface CacheHint {
   /**
-   * Cache hint type.
-   * 
-   * - "ephemeral": Content is stable for the current interaction.
-   *   Suitable for caching within a single user session or request burst.
-   */
-  type: "ephemeral";
-  
-  /**
    * Duration category for cached content.
    * 
-   * | Category    | Minimum | Description                              |
-   * |-------------|---------|------------------------------------------|
-   * | "ephemeral" | 1 min   | Very short-lived, single interaction     |
-   * | "session"   | 30 min  | Session-scoped, multi-turn conversation  |
-   * | "extended"  | 4 hours | Long-lived, cross-session reuse          |
+   * | Category | Minimum | Description                              |
+   * |----------|---------|------------------------------------------|
+   * | "short"  | 1 min   | Very short-lived, single interaction     |
+   * | "medium" | 30 min  | Session-scoped, multi-turn conversation  |
+   * | "long"   | 4 hours | Long-lived, cross-session reuse          |
    * 
-   * Default: "ephemeral"
+   * Default: "short"
    * 
    * NORMATIVE: Providers that honor this hint MUST cache for at least
    * the specified minimum duration. Providers MAY cache longer.
    * Providers that cannot meet the minimum SHOULD behave as if no
    * duration hint was provided.
    */
-  ttl?: "ephemeral" | "session" | "extended";
+  ttl?: "short" | "medium" | "long";
 }
 ```
 
@@ -120,8 +112,8 @@ interface CreateResponseRequest {
    * Providers SHOULD return an error if the cache is not found.
    * 
    * RESERVED: This field is reserved for providers that support
-   * named cache objects. Providers that only support content-addressed
-   * caching SHOULD return an error or ignore this field.
+   * named cache objects. Providers that do not support named caches MUST return an error
+   * when this field is provided.
    * 
    * See "Gap Analysis" section for limitations.
    */
@@ -202,9 +194,9 @@ interface InputTokensDetails {
 | `cache.tools` | `cache_control` on last tool in array | Tools cached as atomic unit |
 | `cache.instructions` | `cache_control` on system message | |
 | Content `cache` | `cache_control` on content block | Direct mapping |
-| `ttl: "ephemeral"` | Default (5 min TTL) | Within bounds |
-| `ttl: "session"` | Extended (1 hour TTL) | Within bounds |
-| `ttl: "extended"` | Extended (1 hour TTL) | Anthropic max is 1h |
+| `ttl: "short"` | Default (5 min TTL) | Within bounds |
+| `ttl: "medium"` | Extended (1 hour TTL) | Within bounds |
+| `ttl: "long"` | Extended (1 hour TTL) | Anthropic max is 1h |
 | `cached_content` | ❌ Not supported | Error or ignore |
 | `cached_tokens` | `cache_read_input_tokens` | |
 | `cache_write_tokens` | `cache_creation_input_tokens` | |
@@ -216,11 +208,11 @@ interface InputTokensDetails {
 {
   instructions: "You are a helpful assistant.",
   cache: {
-    instructions: { type: "ephemeral", ttl: "session" }
+    instructions: { type: "ephemeral", ttl: "medium" }
   },
   tools: [...],
   input: [
-    { type: "input_text", text: "Context...", cache: { type: "ephemeral" } },
+    { type: "input_text", text: "Context...", cache: {} },
     { type: "input_text", text: "Question?" }
   ]
 }
@@ -231,14 +223,14 @@ interface InputTokensDetails {
     {
       type: "text",
       text: "You are a helpful assistant.",
-      cache_control: { type: "ephemeral" }  // With extended TTL header
+      cache_control: {}  // With extended TTL header
     }
   ],
   messages: [
     {
       role: "user",
       content: [
-        { type: "text", text: "Context...", cache_control: { type: "ephemeral" } },
+        { type: "text", text: "Context...", cache_control: {} },
         { type: "text", text: "Question?" }
       ]
     }
@@ -262,9 +254,9 @@ interface InputTokensDetails {
 | `cache.tools` | Create/reuse tools cache object | Gateway manages lifecycle |
 | `cache.instructions` | Create/reuse instructions cache object | Gateway manages lifecycle |
 | Content `cache` | Include in content cache object | Aggregated, not breakpoints |
-| `ttl: "ephemeral"` | TTL ≥ 5 minutes | |
-| `ttl: "session"` | TTL ≥ 1 hour | |
-| `ttl: "extended"` | TTL ≥ 4 hours | Gemini supports arbitrary TTL |
+| `ttl: "short"` | TTL ≥ 5 minutes | |
+| `ttl: "medium"` | TTL ≥ 1 hour | |
+| `ttl: "long"` | TTL ≥ 4 hours | Gemini supports arbitrary TTL |
 | `cached_content` | `cachedContent` reference | Direct mapping |
 | `cached_tokens` | `cachedContentTokenCount` | |
 | `cache_write_tokens` | From cache creation response | |
@@ -283,7 +275,7 @@ When `cache` hints are provided, the gateway:
 {
   instructions: "You are a helpful assistant.",
   cache: {
-    instructions: { type: "ephemeral", ttl: "session" }
+    instructions: { type: "ephemeral", ttl: "medium" }
   },
   input: [...]
 }
@@ -452,13 +444,13 @@ The reserved `cached_content` field provides a migration path. Gateways MAY impl
 
 1. **SHOULD** report `cached_tokens` from automatic caching
 2. **MAY** ignore all `cache` hints without error
-3. **SHOULD** return error for `cached_content` (not supported)
+3. **MUST** return error for `cached_content` (not supported)
 
 ### For Providers Without Caching (Mistral, Cohere)
 
 1. **MAY** ignore all `cache` hints without error
 2. **SHOULD** report `cached_tokens: 0` when hints are provided
-3. **SHOULD** return error for `cached_content` (not supported)
+3. **MUST** return error for `cached_content` (not supported)
 
 ---
 
@@ -470,7 +462,7 @@ The reserved `cached_content` field provides a migration path. Gateways MAY impl
 // Verify cache hints result in cache hits on repeated requests
 
 const content = [
-  { type: "input_text", text: "Cached prefix", cache: { type: "ephemeral" } },
+  { type: "input_text", text: "Cached prefix", cache: {} },
   { type: "input_text", text: "Uncached suffix" }
 ];
 
@@ -493,7 +485,7 @@ const r2 = await createResponse({ input: content });
 // Verify cache persists for at least minimum duration
 
 const content = [
-  { type: "input_text", text: "Long-lived content", cache: { type: "ephemeral", ttl: "session" } }
+  { type: "input_text", text: "Long-lived content", cache: { type: "ephemeral", ttl: "medium" } }
 ];
 
 const r1 = await createResponse({ input: content });
@@ -516,7 +508,7 @@ const request = {
     { type: "function", name: "fetch", ... }
   ],
   cache: {
-    tools: { type: "ephemeral" }
+    tools: {}
   },
   input: [{ type: "input_text", text: "Use search" }]
 };
