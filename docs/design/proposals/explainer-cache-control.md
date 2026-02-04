@@ -269,7 +269,7 @@ developers can make informed decisions.
 ## Stakeholder Feedback
 
 This proposal has not yet been formally reviewed. Initial design was informed
-by production experience with Anthropic caching in [VS Code AI Gateway](https://github.com/SferaDev/vscode-ai-gateway)
+by production experience with Anthropic caching in [VS Code AI Gateway](https://github.com/vercel-labs/vscode-ai-gateway)
 and analysis of [OpenRouter](https://openrouter.ai/docs/features/prompt-caching)
 and [LiteLLM](https://docs.litellm.ai/docs/completion/prompt_caching) caching approaches.
 
