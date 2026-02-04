@@ -9,20 +9,6 @@
 - [OpenResponses Issue Tracker](https://github.com/openresponses/openresponses/issues)
 - [Proposal Discussion](https://github.com/openresponses/openresponses/discussions)
 
-## Table of Contents
-
-<!-- START doctoc generated TOC please keep comment here to allow auto update -->
-- [Introduction](#introduction)
-- [User-Facing Problem](#user-facing-problem)
-- [Goals](#goals)
-- [Non-goals](#non-goals)
-- [Proposed Approach](#proposed-approach)
-- [Alternatives Considered](#alternatives-considered)
-- [Privacy and Security Considerations](#privacy-and-security-considerations)
-- [Stakeholder Feedback](#stakeholder-feedback)
-- [References](#references)
-<!-- END doctoc generated TOC please keep comment here to allow auto update -->
-
 ## Introduction
 
 LLM prompt caching can reduce API costs by up to 90%. However, each provider
@@ -74,32 +60,31 @@ Most developers choose "no caching" and accept the costs.
 
 ## Goals
 
-- **Portable caching**: A single `caching: "auto"` field that works on
-  Anthropic, Gemini, and OpenAI without provider-specific code.
+- A single `caching: "auto"` field that works on Anthropic, Gemini, and
+  OpenAI without provider-specific code.
 
-- **Zero-config for common cases**: Multi-turn conversations with stable
-  tools and instructions should "just work" without configuration.
+- Multi-turn conversations with stable tools and instructions should
+  benefit from caching without configuration.
 
-- **Observability**: Report cache hits via `cached_tokens` so developers
-  can verify caching is working.
+- Cache hits should be reported via `cached_tokens` so developers can
+  verify caching is working.
 
-- **Extensibility**: Support fine-grained control (TTL hints, named caches)
-  for applications that need it.
+- Fine-grained control (TTL hints, named caches) should be available for
+  applications that need it.
 
 ## Non-goals
 
-- **Guaranteed caching**: We cannot force providers to cache content. The
-  spec defines hints that providers should honor, not mandates they must.
+- We cannot force providers to cache content. The spec defines hints that
+  providers should honor, not mandates they must.
 
-- **Identical behavior across providers**: Providers have different minimum
-  sizes, TTLs, and pricing. A cache hit on one provider may be a miss on
-  another.
+- Providers have different minimum sizes, TTLs, and pricing. A cache hit
+  on one provider may be a miss on another. We do not aim for identical
+  behavior.
 
-- **Cross-request cache sharing by default**: Named caches (Gemini's model)
-  are exposed but not required for basic functionality.
+- Named caches (Gemini's model) are exposed but not required for basic
+  functionality.
 
-- **Cache invalidation API**: Explicit cache clearing is out of scope for
-  this proposal.
+- Explicit cache clearing is out of scope.
 
 ## Proposed Approach
 
@@ -113,7 +98,7 @@ const response = await client.responses.create({
   input: [...],
   tools: [...],
   instructions: "You are a helpful assistant.",
-  caching: "auto"  // ← Enable portable caching
+  caching: "auto"
 });
 ```
 
@@ -153,8 +138,8 @@ For applications needing more control, `caching` accepts an object:
 
 ```typescript
 caching: {
-  tools: { ttl: "long" },       // Keep tools cached across sessions
-  instructions: { ttl: "medium" } // Keep instructions cached for the session
+  tools: { ttl: "long" },
+  instructions: { ttl: "medium" }
 }
 ```
 
@@ -181,7 +166,7 @@ input: [
       {
         type: "input_text",
         text: longDocumentText,
-        cache: {}  // ← Cache up to this point
+        cache: {}
       }
     ]
   }
@@ -193,12 +178,10 @@ input: [
 Gemini's named cache API is exposed but not required:
 
 ```typescript
-// Create a named cache (Gemini-specific)
 const cache = await caches.create({ model: "...", contents: [...] });
 
-// Reference it
 const response = await client.responses.create({
-  cached_content: cache.name,  // Silently ignored on other providers
+  cached_content: cache.name,
   input: [...]
 });
 ```
@@ -227,7 +210,6 @@ Combined with `cached_tokens`, this enables full observability:
 An earlier design allowed `cache_control` on individual tools:
 
 ```typescript
-// ❌ Rejected
 tools: [
   { name: "read_file", cache_control: { type: "ephemeral" } },
   { name: "write_file", cache_control: { type: "ephemeral" } }
@@ -243,34 +225,24 @@ of granularity.
 An earlier design used numeric TTL values:
 
 ```typescript
-// ❌ Rejected
-caching: { tools: { ttl: 3600 } }  // seconds? milliseconds? provider-specific?
+caching: { tools: { ttl: 3600 } }
 ```
 
-This was rejected because:
-1. It exposed provider implementation details (Anthropic's 5m/1h choices)
-2. Different providers have different minimum/maximum TTLs
-3. Semantic categories (`"short"/"medium"/"long"`) are more portable
+This was rejected because it exposed provider implementation details
+(Anthropic's 5m/1h choices), different providers have different min/max
+TTLs, and semantic categories are more portable.
 
 ### Error on Unsupported Features
 
-An earlier design had `cached_content` throw an error on unsupported providers:
-
-```typescript
-// ❌ Rejected
-cached_content: "cache-123"  // Throws on Anthropic/OpenAI
-```
-
+An earlier design had `cached_content` throw an error on unsupported providers.
 This was rejected because it forces developers to write provider detection
-code, defeating the portability goal. Silent ignore enables graceful
-degradation.
+code, defeating the portability goal.
 
 ### Explicit Provider Detection
 
 We considered requiring developers to check provider support:
 
 ```typescript
-// ❌ Rejected
 if (gateway.supports("named_caches")) {
   const cache = await caches.create(...);
   response = await client.responses.create({ cached_content: cache.name, ... });
@@ -279,30 +251,27 @@ if (gateway.supports("named_caches")) {
 }
 ```
 
-This was rejected because it recreates the problem we're solving. The whole
-point is to avoid provider-specific branches.
+This recreates the problem we're solving.
 
 ## Privacy and Security Considerations
 
-**Cache Isolation**: Caches should be isolated per-session or per-user to
-prevent cross-user data leakage. Gateways implementing named caches must
-enforce appropriate isolation boundaries.
+Caches should be isolated per-session or per-user to prevent cross-user
+data leakage. Gateways implementing named caches must enforce appropriate
+isolation boundaries.
 
-**Sensitive Content**: Developers should consider whether cached content
-contains sensitive data. Cached content persists according to the TTL,
-even if the original request is complete.
+Developers should consider whether cached content contains sensitive data.
+Cached content persists according to the TTL, even after the original
+request completes.
 
-**Cost Visibility**: Cache write costs (25% extra on Anthropic) should be
-clearly reported so developers can make informed decisions.
+Cache write costs (25% extra on Anthropic) should be clearly reported so
+developers can make informed decisions.
 
 ## Stakeholder Feedback
 
-This proposal has not yet been formally reviewed by LLM providers or the
-OpenResponses maintainers. Initial design was informed by:
-
-- [Shaper's issue on provider options for caching](https://github.com/openresponses/openresponses/issues/XXX)
-- Production experience with Anthropic caching in VS Code AI Gateway
-- Analysis of OpenRouter and LiteLLM caching approaches
+This proposal has not yet been formally reviewed. Initial design was informed
+by production experience with Anthropic caching in [VS Code AI Gateway](https://github.com/SferaDev/vscode-ai-gateway)
+and analysis of [OpenRouter](https://openrouter.ai/docs/features/prompt-caching)
+and [LiteLLM](https://docs.litellm.ai/docs/completion/prompt_caching) caching approaches.
 
 ## References
 
