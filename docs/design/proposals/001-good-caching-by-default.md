@@ -29,9 +29,8 @@ cache hits. However, provider implementations differ substantially:
 | Gemini | Implicit (automatic) | No |
 | OpenAI | Implicit (automatic) | No |
 
-This creates a dilemma for clients targeting multiple providers: implement
-provider-specific caching logic, or forgo caching entirely. Neither option
-is satisfactory.
+Clients targeting multiple providers must either implement provider-specific
+caching logic or forgo caching entirely.
 
 This proposal enables portable caching with a single field. A client can write
 `caching: "auto"` and trust that the gateway will do the right thing for each
@@ -55,25 +54,23 @@ interface CreateResponseRequest {
 
 Gateways identify "stable content" as:
 
-1. **Tools** — The entire tools array (cached as a unit)
-2. **Instructions** — The system message
-3. **Conversation prefix** — All input items except the final user message
+| Content | Scope |
+|---------|-------|
+| Tools | The entire tools array, cached as a unit |
+| Instructions | The system message |
+| Conversation prefix | All input items except the final user message |
 
 This ordering (tools → instructions → messages) matches Anthropic's required
 cache order and works naturally with prefix-based caching on other providers.
 
 ### Gateway Behavior
 
-**Anthropic**: Add `cache_control: { type: "ephemeral" }` to stable content,
-respecting the 4-breakpoint limit. The gateway places breakpoints at optimal
-positions (after tools, after instructions, after conversation prefix).
+For Anthropic, the gateway adds `cache_control: { type: "ephemeral" }` to
+stable content, respecting the 4-breakpoint limit. Breakpoints are placed
+after tools, after instructions, and after the conversation prefix.
 
-**Gemini**: No translation required. Gemini's implicit caching activates
-automatically for repeated prefixes. The gateway may optionally create
-explicit cache objects for longer TTLs.
-
-**OpenAI / Azure**: No translation required. Implicit caching activates
-automatically for repeated prefixes ≥1024 tokens.
+For Gemini and OpenAI, no translation is required. Both providers cache
+repeated prefixes automatically (OpenAI requires ≥1024 tokens).
 
 ### Usage Reporting
 
@@ -102,21 +99,22 @@ Following these constraints ensures good caching on all providers.
 
 ## Conformance
 
-**Gateways:**
+Gateways:
+
 - MUST accept `caching: "auto"` without error
 - SHOULD apply provider-appropriate caching when specified
 - MUST report `cached_tokens` when caching occurs and provider reports it
 
-**Clients:**
+Clients:
+
 - SHOULD NOT depend on caching behavior beyond `cached_tokens` reporting
 - SHOULD structure requests with stable content first
 
 ## When to Use
 
-`caching: "auto"` benefits:
-- Multi-turn conversations (conversation prefix grows, remains stable)
-- Applications with stable tools or instructions
-- Any scenario where the same prefix appears in multiple requests
+`caching: "auto"` benefits multi-turn conversations (the conversation prefix
+grows but remains stable), applications with stable tools or instructions,
+and any scenario where the same prefix appears in multiple requests.
 
 For single requests with no reuse potential, the cache write overhead on some
 providers (25% on Anthropic) may exceed benefits. A reasonable heuristic:
