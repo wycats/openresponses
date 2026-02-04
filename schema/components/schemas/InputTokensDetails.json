@@ -2,11 +2,11 @@
   "properties": {
     "cached_tokens": {
       "type": "integer",
-      "description": "The number of input tokens that were served from cache."
+      "description": "The number of input tokens that were served from cache. Providers MUST report this field when cache hints are provided and caching is supported, even if the value is 0."
     },
-    "cache_creation_tokens": {
+    "cache_write_tokens": {
       "type": "integer",
-      "description": "The number of input tokens written to a prompt cache (cache miss, new cache entry created)."
+      "description": "The number of input tokens written to cache. Reported when new content is added to the cache. Subsequent requests with the same content will report cached_tokens instead."
     }
   },
   "type": "object",
@@ -14,6 +14,6 @@
     "cached_tokens"
   ],
   "title": "Input tokens details",
-  "description": "A breakdown of input token usage that was recorded.",
+  "description": "A breakdown of input token usage including cache hit/miss information.",
   "x-openai-class-name": "responsesapi.api.resources.response_resource.InputTokensDetails"
 }

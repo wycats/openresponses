@@ -36,10 +36,6 @@
       ],
       "default": "function",
       "x-stainless-const": true
-    },
-    "cache_control": {
-      "$ref": "./CacheControlParam.json",
-      "description": "Optional cache control hint. When present on the last tool, indicates that the tools block should be cached."
     }
   },
   "type": "object",

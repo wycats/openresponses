@@ -20,10 +20,6 @@
     "external_web_access": {
       "type": "boolean",
       "description": "Allow live internet access for web search. When false, the web search tool runs in offline/cache-only mode and will not fetch new external content."
-    },
-    "cache_control": {
-      "$ref": "./CacheControlParam.json",
-      "description": "Optional cache control hint. When present on the last tool, indicates that the tools block should be cached."
     }
   },
   "type": "object",

@@ -308,6 +308,28 @@
           "type": "null"
         }
       ]
+    },
+    "cache": {
+      "anyOf": [
+        {
+          "$ref": "./RequestCacheParam.json",
+          "description": "Cache hints for request-level components (tools and instructions). These hints indicate that the specified components are stable and suitable for caching. Providers MAY honor these hints to optimize repeated requests."
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "cached_content": {
+      "anyOf": [
+        {
+          "type": "string",
+          "description": "Reference to a named cache object. When specified, the referenced cache content acts as an implicit prefix to the request. The cache MUST exist and be accessible. This field is reserved for providers that support named cache objects (e.g., Gemini). Providers that only support content-addressed caching SHOULD return an error or ignore this field."
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "type": "object",

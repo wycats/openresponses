@@ -14,9 +14,9 @@
       "maxLength": 10485760,
       "description": "The text input to the model."
     },
-    "cache_control": {
-      "$ref": "./CacheControlParam.json",
-      "description": "Optional cache control hint. When present, indicates that content up to and including this part should be cached."
+    "cache": {
+      "$ref": "./CacheHintParam.json",
+      "description": "Cache hint for this content block. Indicates that content up to and including this block is stable across requests and SHOULD be cached. If a subsequent request contains identical content up to a cache-hinted block, the provider SHOULD report cached_tokens > 0 in usage."
     }
   },
   "type": "object",

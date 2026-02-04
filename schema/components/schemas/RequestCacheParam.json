@@ -1,0 +1,17 @@
+{
+  "properties": {
+    "tools": {
+      "$ref": "./CacheHintParam.json",
+      "description": "Cache hint for the tools array. When specified, indicates that the entire tools configuration is stable and SHOULD be cached as a unit."
+    },
+    "instructions": {
+      "$ref": "./CacheHintParam.json",
+      "description": "Cache hint for the instructions (system message). When specified, indicates that the instructions are stable and SHOULD be cached."
+    }
+  },
+  "type": "object",
+  "required": [],
+  "title": "Request cache hints",
+  "description": "Cache hints for request-level components (tools and instructions). These hints indicate that the specified components are stable and suitable for caching.",
+  "x-openai-class-name": "responsesapi.api.params.request_cache_param.RequestCacheParam"
+}

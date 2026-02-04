@@ -1,0 +1,20 @@
+{
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": ["ephemeral"],
+      "description": "Cache hint type. `ephemeral` indicates content is stable for the current interaction and suitable for caching.",
+      "x-stainless-const": true
+    },
+    "ttl": {
+      "type": "string",
+      "enum": ["ephemeral", "session", "extended"],
+      "description": "Duration category for cached content.\n\n| Category | Minimum | Description |\n|----------|---------|-------------|\n| `ephemeral` | 1 min | Very short-lived, single interaction |\n| `session` | 30 min | Session-scoped, multi-turn conversation |\n| `extended` | 4 hours | Long-lived, cross-session reuse |\n\nDefault: `ephemeral`\n\nProviders that honor this hint MUST cache for at least the specified minimum duration."
+    }
+  },
+  "type": "object",
+  "required": ["type"],
+  "title": "Cache hint",
+  "description": "A cache hint indicating that content up to and including this part is stable and suitable for caching. Providers MAY honor this hint to optimize repeated requests. Behavior is provider-specific; hints may be ignored.",
+  "x-openai-class-name": "responses_common.api.params.cache_hint_param.CacheHintParam"
+}
