@@ -38,6 +38,36 @@ The specification defines guarantees in terms of observable outcomes (cache hits
 
 Duration hints use semantic categories (`short`, `medium`, `long`) with specified minimum durations, following the CLDR/Intl pattern of abstracting locale-specific implementations behind normative behavior bounds.
 
+### 4. "Good Caching by Default"
+
+**Axiom:** A client should be able to say "please cache this appropriately" and get caching behavior comparable to what a skilled implementer would achieve using each provider's native API—without provider-specific code.
+
+This is achievable because:
+
+1. **Anthropic** honors cache hints explicitly via breakpoint markers
+2. **Gemini** and **OpenAI** provide implicit automatic caching that activates when content prefixes repeat across requests
+3. **All providers** report cache effectiveness via `cached_tokens` in usage
+
+The implication: cache hints are *additive* for explicit-caching providers (Anthropic) and *harmless no-ops* for implicit-caching providers (Gemini, OpenAI). A generic client that adds cache hints to stable content will get good caching behavior everywhere, and can observe effectiveness through usage reporting.
+
+**The generic pattern:**
+
+```typescript
+// Works across all providers
+{
+  cache: {
+    tools: {},                              // Cache tools (if present)
+    instructions: { ttl: "medium" }         // Cache system message
+  },
+  input: [
+    { type: "input_text", text: "...", cache: {} },  // Cache stable prefix
+    { type: "input_text", text: "..." }              // Don't cache dynamic suffix
+  ]
+}
+```
+
+Gateway implementers for implicit-caching providers (Gemini, OpenAI) need not do anything special—hints can be ignored, and the provider's automatic caching will still provide benefits. The hints serve as documentation of client intent and enable explicit control where supported.
+
 ---
 
 ## Specification
@@ -263,31 +293,38 @@ interface InputTokensDetails {
 
 **Gateway Behavior**:
 
-When `cache` hints are provided, the gateway:
+Gemini gateways have two implementation options:
 
-1. **Computes content hash** of tools/instructions/hinted content
-2. **Checks for existing cache** with matching hash
-3. **Creates cache if needed** with appropriate TTL
-4. **References cache** in Gemini request via `cachedContent`
+**Option 1: Rely on Implicit Caching (Recommended for Simplicity)**
+
+Gemini automatically caches repeated content prefixes. A minimal gateway can:
+
+1. **Strip cache hints** from the request (they're informational only)
+2. **Pass content through** to Gemini unchanged
+3. **Report `cached_tokens`** from Gemini's `usage_metadata.cached_content_token_count`
+
+This satisfies the "good caching by default" axiom with zero gateway complexity.
+Gemini's implicit caching provides comparable behavior to explicit caching for
+most use cases.
+
+**Option 2: Create Explicit Cache Objects (For Full Control)**
+
+For gateways that want to honor TTL hints or provide more predictable caching:
+
+1. **Compute content hash** of tools/instructions/hinted content
+2. **Check for existing cache** with matching hash
+3. **Create cache if needed** with appropriate TTL
+4. **Reference cache** in Gemini request via `cachedContent`
 
 ```typescript
-// OpenResponses request
-{
-  instructions: "You are a helpful assistant.",
-  cache: {
-    instructions: { type: "ephemeral", ttl: "medium" }
-  },
-  input: [...]
-}
-
-// Gateway behavior (pseudocode)
+// Gateway behavior (pseudocode) - Option 2 only
 const hash = computeHash(request.instructions);
 let cache = await findCache(hash);
 if (!cache) {
   cache = await gemini.caches.create({
     model: "gemini-1.5-flash",
     systemInstruction: request.instructions,
-    ttl: "3600s"  // 1 hour for "session"
+    ttl: "3600s"  // 1 hour for "medium"
   });
 }
 
@@ -297,6 +334,9 @@ if (!cache) {
   contents: translateInput(request.input)
 }
 ```
+
+**Note:** Option 2 requires the gateway to maintain state (cache mappings) and
+handle cleanup. Option 1 is stateless and sufficient for most applications.
 
 **`cached_content` Support**:
 
