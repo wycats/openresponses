@@ -1,186 +1,313 @@
-# Cache Control Explainer
+# Cache Control for OpenResponses
 
-This document explains the design philosophy behind the OpenResponses cache
-control extension. It accompanies the normative proposals:
+## Authors
 
-- [Proposal 001: Automatic Caching](./001-good-caching-by-default.md)
-- [Proposal 002: Cache Control Hints](./002-cache-control-hints.md)
+- Yehuda Katz ([@wycats](https://github.com/wycats))
 
-## The Problem
+## Participate
 
-LLM providers implement prompt caching differently:
+- [OpenResponses Issue Tracker](https://github.com/openresponses/openresponses/issues)
+- [Proposal Discussion](https://github.com/openresponses/openresponses/discussions)
 
-| Provider | Model | Client Responsibility |
-|----------|-------|----------------------|
-| Anthropic | Explicit breakpoints | Mark cacheable content with `cache_control` |
-| Gemini | Named cache objects | Create and manage cache objects via API |
-| OpenAI | Implicit (automatic) | None—caching happens transparently |
+## Table of Contents
 
-A client targeting multiple providers faces a choice:
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+- [Introduction](#introduction)
+- [User-Facing Problem](#user-facing-problem)
+- [Goals](#goals)
+- [Non-goals](#non-goals)
+- [Proposed Approach](#proposed-approach)
+- [Alternatives Considered](#alternatives-considered)
+- [Privacy and Security Considerations](#privacy-and-security-considerations)
+- [Stakeholder Feedback](#stakeholder-feedback)
+- [References](#references)
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
-1. **Provider-specific code**: Implement different caching logic per provider
-2. **No caching**: Ignore caching entirely, accept higher costs
-3. **Lowest common denominator**: Only use features available everywhere (nothing)
+## Introduction
 
-None of these options is satisfactory.
+LLM prompt caching can reduce API costs by up to 90%. However, each provider
+implements caching differently: Anthropic requires explicit markers, Gemini
+uses named cache objects, and OpenAI caches implicitly. This proposal adds
+a portable `caching` field to OpenResponses that works across providers.
 
-## Design Philosophy
+The key insight is that most applications share a common pattern—tools,
+instructions, and conversation history are reused across turns—and this
+pattern can be cached without provider-specific code.
 
-### The Intl/CLDR Pattern
+## User-Facing Problem
 
-The cache control extension follows the design pattern established by
-JavaScript's `Intl` API and the Unicode CLDR:
+Consider a developer building an AI coding assistant. The assistant uses
+a fixed set of tools (file operations, terminal access, search) and a
+consistent system prompt. In a typical session, the user might have 50+
+conversation turns.
 
-> **Semantic categories with normative bounds**
+Without caching, the developer pays full price to re-encode those tools
+and the system prompt on every single turn. With Anthropic, this overhead
+can exceed the cost of the actual completion.
 
-Instead of exposing raw provider values, we define semantic categories that
-express *intent*. Each category has normative bounds that providers must honor.
-
-**Example: TTL**
-
-Rather than exposing Anthropic's 5-minute and 1-hour TTLs directly:
+The developer wants to enable caching, but faces a problem:
 
 ```typescript
-// ❌ Provider-specific
-ttl: 300  // seconds? minutes? provider-specific?
+// ❌ Anthropic requires cache_control markers
+tools: [
+  { name: "read_file", ..., cache_control: { type: "ephemeral" } }
+]
+
+// ❌ Gemini uses a completely different API
+await caches.create({ model: "...", contents: [...] })
+const response = await model.generateContent({
+  cachedContent: cache.name, ...
+})
+
+// ❌ OpenAI has no explicit caching API at all
+// (but does cache automatically if your prefix is long enough)
 ```
 
-We define semantic categories:
+The developer must now:
+
+1. Detect which provider is in use
+2. Implement provider-specific caching logic
+3. Test across all providers
+4. Maintain divergent code paths
+
+Most developers choose "no caching" and accept the costs.
+
+## Goals
+
+- **Portable caching**: A single `caching: "auto"` field that works on
+  Anthropic, Gemini, and OpenAI without provider-specific code.
+
+- **Zero-config for common cases**: Multi-turn conversations with stable
+  tools and instructions should "just work" without configuration.
+
+- **Observability**: Report cache hits via `cached_tokens` so developers
+  can verify caching is working.
+
+- **Extensibility**: Support fine-grained control (TTL hints, named caches)
+  for applications that need it.
+
+## Non-goals
+
+- **Guaranteed caching**: We cannot force providers to cache content. The
+  spec defines hints that providers should honor, not mandates they must.
+
+- **Identical behavior across providers**: Providers have different minimum
+  sizes, TTLs, and pricing. A cache hit on one provider may be a miss on
+  another.
+
+- **Cross-request cache sharing by default**: Named caches (Gemini's model)
+  are exposed but not required for basic functionality.
+
+- **Cache invalidation API**: Explicit cache clearing is out of scope for
+  this proposal.
+
+## Proposed Approach
+
+### Automatic Caching
+
+The simplest form adds a single field:
 
 ```typescript
-// ✅ Semantic with normative bounds
-ttl: "short"   // minimum 1 minute
-ttl: "medium"  // minimum 30 minutes  
-ttl: "long"    // minimum 4 hours
+const response = await client.responses.create({
+  model: "claude-sonnet-4-20250514",
+  input: [...],
+  tools: [...],
+  instructions: "You are a helpful assistant.",
+  caching: "auto"  // ← Enable portable caching
+});
 ```
 
-This allows:
-- Anthropic to map `"medium"` → 1 hour (their extended TTL)
-- Gemini to map `"medium"` → exactly 30 minutes or longer
-- Future providers to choose appropriate values within bounds
+When `caching: "auto"` is set, the gateway:
 
-### The Union of Limitations
+1. Identifies stable content (tools, instructions, conversation prefix)
+2. Applies provider-appropriate caching markers
+3. Reports cache hits via `response.usage.input_tokens_details.cached_tokens`
 
-When designing portable APIs, we consider the **union of limitations** across
-providers. Clients who follow these constraints get good behavior everywhere:
+The developer writes one code path. The gateway handles provider differences.
 
-| Constraint | Source | Implication |
-|------------|--------|-------------|
-| Content-addressed | All | Byte-identical content required for cache hit |
-| Prefix-based | All | Only leading content is cached |
-| Ordered | Anthropic | Tools → instructions → messages |
-| Minimum size | OpenAI | Content below ~1K tokens may not cache |
-| Breakpoint limit | Anthropic | Maximum 4 explicit breakpoints |
+### What Gets Cached
 
-A client following all constraints gets optimal caching on every provider.
+The gateway identifies "stable content" using a simple heuristic:
 
-### Observable Behavior Contracts
+| Content | Rationale |
+|---------|-----------|
+| Tools | Typically fixed for the application |
+| Instructions | Typically fixed for the session |
+| All messages except the last | Growing conversation history |
 
-The spec defines behavior in terms of **observable outcomes**, not
-implementation details:
+This matches the natural structure of multi-turn conversations.
 
-- `cached_tokens > 0` → cache hit occurred
-- `cache_write_tokens > 0` → cache was populated
-- Output equivalence → cached and uncached requests produce identical results
+### Provider Translation
 
-This allows providers flexibility in implementation while guaranteeing
-predictable client behavior.
+**Anthropic**: The gateway adds `cache_control: { type: "ephemeral" }` to
+stable content, respecting Anthropic's required order (tools → instructions
+→ messages) and breakpoint limits.
 
-## The Two-Proposal Structure
+**Gemini**: No translation needed. Gemini caches repeated prefixes automatically.
 
-### Why Two Proposals?
+**OpenAI**: No translation needed. OpenAI caches prefixes ≥1024 tokens automatically.
 
-**Proposal 001** (Automatic Caching) addresses the 90% case:
+### Fine-Grained Control
 
-- Single field: `caching: "auto"`
-- Zero configuration
-- Gateway handles all provider translation
-- Ship immediately, benefit immediately
-
-**Proposal 002** (Cache Control Hints) addresses power users:
-
-- TTL control for different caching strategies
-- Content-level breakpoints for precise control
-- Named cache references for Gemini's model
-- Cache write reporting for observability
-
-This separation allows:
-1. Quick adoption of basic caching (001)
-2. Deliberate design of advanced features (002)
-3. Implementation experience before committing to complex features
-
-### The "Good Caching by Default" Axiom
-
-The core design principle:
-
-> A client using `caching: "auto"` with a well-structured request should get
-> good caching behavior on any provider, without provider-specific code.
-
-"Good" means:
-- Cache hits when content is reused
-- Reasonable TTL for the use case
-- No unexpected costs or failures
-
-This axiom drives all design decisions. Features that would violate it
-(like requiring `cached_content` for basic caching) are rejected.
-
-## Provider Landscape
-
-### Anthropic: The Breakpoint Model
-
-Anthropic requires explicit `cache_control` markers. Content is cached from
-the start of the request up to each marker. Key constraints:
-
-- Maximum 4 breakpoints per request
-- Tools must be cached before system, system before messages
-- Two TTL options: 5 minutes (default) or 1 hour (extended)
-- Cache writes cost 25% more; cache reads cost 90% less
-
-### Gemini: The Object Model
-
-Gemini uses named cache objects that exist independently of requests:
-
-- Create a cache object with content and TTL
-- Reference it in requests via `cachedContent`
-- Also supports implicit caching for repeated prefixes
-
-This model enables cross-request cache sharing but requires explicit
-cache management.
-
-### OpenAI: The Implicit Model
-
-OpenAI caches automatically with no client action:
-
-- Prefixes ≥1024 tokens are cached
-- 50% discount on cached tokens
-- No explicit control available
-
-This is the simplest model but offers no tuning.
-
-## Future Considerations
-
-### Provider Options Escape Hatch
-
-For provider-specific features not covered by the spec:
+For applications needing more control, `caching` accepts an object:
 
 ```typescript
-{
-  caching: { tools: { ttl: "medium" } },
-  provider_options: {
-    anthropic: { /* Anthropic-specific */ },
-    google: { /* Gemini-specific */ }
-  }
+caching: {
+  tools: { ttl: "long" },       // Keep tools cached across sessions
+  instructions: { ttl: "medium" } // Keep instructions cached for the session
 }
 ```
 
-This preserves portability for common cases while allowing provider-specific
-optimization when needed.
+TTL categories use semantic names with normative minimum durations:
 
-### Potential Extensions
+| Category | Minimum Duration | Use Case |
+|----------|------------------|----------|
+| `"short"` | 1 minute | Single interaction |
+| `"medium"` | 30 minutes | Multi-turn conversation |
+| `"long"` | 4 hours | Cross-session reuse |
 
-- **Cache statistics**: Hit rate, eviction count, etc.
-- **Cache invalidation**: Explicit cache clearing
-- **Cache sharing**: Cross-session or cross-user caching
-- **Cost estimation**: Predict caching costs before request
+Providers must cache for at least the minimum duration. They may cache longer.
 
-These are deferred pending implementation experience with the core proposals.
+### Content-Level Breakpoints
+
+Individual content parts can mark explicit cache breakpoints:
+
+```typescript
+input: [
+  {
+    type: "message",
+    role: "user",
+    content: [
+      {
+        type: "input_text",
+        text: longDocumentText,
+        cache: {}  // ← Cache up to this point
+      }
+    ]
+  }
+]
+```
+
+### Named Caches (Gemini)
+
+Gemini's named cache API is exposed but not required:
+
+```typescript
+// Create a named cache (Gemini-specific)
+const cache = await caches.create({ model: "...", contents: [...] });
+
+// Reference it
+const response = await client.responses.create({
+  cached_content: cache.name,  // Silently ignored on other providers
+  input: [...]
+});
+```
+
+The `cached_content` field is silently ignored on providers that don't
+support it. This allows Gemini-optimized code without breaking portability.
+
+### Cache Write Reporting
+
+A new field reports when the cache was populated:
+
+```typescript
+response.usage.input_tokens_details.cache_write_tokens
+```
+
+Combined with `cached_tokens`, this enables full observability:
+
+- `cached_tokens > 0, cache_write_tokens === 0`: Cache hit
+- `cached_tokens === 0, cache_write_tokens > 0`: Cache miss, now cached
+- Both zero: No caching occurred
+
+## Alternatives Considered
+
+### Per-Tool Cache Control
+
+An earlier design allowed `cache_control` on individual tools:
+
+```typescript
+// ❌ Rejected
+tools: [
+  { name: "read_file", cache_control: { type: "ephemeral" } },
+  { name: "write_file", cache_control: { type: "ephemeral" } }
+]
+```
+
+This was rejected because Anthropic caches tools as a unit—you can't cache
+some tools and not others. The per-tool markers created a false impression
+of granularity.
+
+### Literal TTL Values
+
+An earlier design used numeric TTL values:
+
+```typescript
+// ❌ Rejected
+caching: { tools: { ttl: 3600 } }  // seconds? milliseconds? provider-specific?
+```
+
+This was rejected because:
+1. It exposed provider implementation details (Anthropic's 5m/1h choices)
+2. Different providers have different minimum/maximum TTLs
+3. Semantic categories (`"short"/"medium"/"long"`) are more portable
+
+### Error on Unsupported Features
+
+An earlier design had `cached_content` throw an error on unsupported providers:
+
+```typescript
+// ❌ Rejected
+cached_content: "cache-123"  // Throws on Anthropic/OpenAI
+```
+
+This was rejected because it forces developers to write provider detection
+code, defeating the portability goal. Silent ignore enables graceful
+degradation.
+
+### Explicit Provider Detection
+
+We considered requiring developers to check provider support:
+
+```typescript
+// ❌ Rejected
+if (gateway.supports("named_caches")) {
+  const cache = await caches.create(...);
+  response = await client.responses.create({ cached_content: cache.name, ... });
+} else {
+  response = await client.responses.create({ caching: "auto", ... });
+}
+```
+
+This was rejected because it recreates the problem we're solving. The whole
+point is to avoid provider-specific branches.
+
+## Privacy and Security Considerations
+
+**Cache Isolation**: Caches should be isolated per-session or per-user to
+prevent cross-user data leakage. Gateways implementing named caches must
+enforce appropriate isolation boundaries.
+
+**Sensitive Content**: Developers should consider whether cached content
+contains sensitive data. Cached content persists according to the TTL,
+even if the original request is complete.
+
+**Cost Visibility**: Cache write costs (25% extra on Anthropic) should be
+clearly reported so developers can make informed decisions.
+
+## Stakeholder Feedback
+
+This proposal has not yet been formally reviewed by LLM providers or the
+OpenResponses maintainers. Initial design was informed by:
+
+- [Shaper's issue on provider options for caching](https://github.com/openresponses/openresponses/issues/XXX)
+- Production experience with Anthropic caching in VS Code AI Gateway
+- Analysis of OpenRouter and LiteLLM caching approaches
+
+## References
+
+- [Anthropic Prompt Caching](https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching)
+- [Gemini Context Caching](https://ai.google.dev/gemini-api/docs/caching)
+- [OpenAI Prompt Caching](https://platform.openai.com/docs/guides/prompt-caching)
+- [Proposal 001: Automatic Caching](./001-good-caching-by-default.md)
+- [Proposal 002: Cache Control Hints](./002-cache-control-hints.md)
