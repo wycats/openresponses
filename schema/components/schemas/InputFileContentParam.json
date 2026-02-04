@@ -2,7 +2,9 @@
   "properties": {
     "type": {
       "type": "string",
-      "enum": ["input_file"],
+      "enum": [
+        "input_file"
+      ],
       "description": "The type of the input item. Always `input_file`.",
       "default": "input_file",
       "x-stainless-const": true
@@ -52,10 +54,16 @@
           "type": "null"
         }
       ]
+    },
+    "cache_control": {
+      "$ref": "./CacheControlParam.json",
+      "description": "Optional cache control hint. When present, indicates that content up to and including this part should be cached."
     }
   },
   "type": "object",
-  "required": ["type"],
+  "required": [
+    "type"
+  ],
   "title": "Input file",
   "description": "A file input to the model.",
   "x-openai-class-name": "responses_common.api.params.input_content_param.InputFileContentParam"

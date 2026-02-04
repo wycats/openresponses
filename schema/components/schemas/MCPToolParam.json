@@ -2,7 +2,9 @@
   "properties": {
     "type": {
       "type": "string",
-      "enum": ["mcp"],
+      "enum": [
+        "mcp"
+      ],
       "description": "The type of the tool. Always `mcp`.",
       "default": "mcp",
       "x-stainless-const": true
@@ -50,9 +52,16 @@
         }
       ],
       "description": "Controls which MCP tools require explicit user approval before execution."
+    },
+    "cache_control": {
+      "$ref": "./CacheControlParam.json",
+      "description": "Optional cache control hint. When present on the last tool, indicates that the tools block should be cached."
     }
   },
   "type": "object",
-  "required": ["type", "server_label"],
+  "required": [
+    "type",
+    "server_label"
+  ],
   "x-openai-class-name": "responses_common.api.params.tool_param.MCPToolParam"
 }

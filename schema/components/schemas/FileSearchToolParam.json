@@ -2,7 +2,9 @@
   "properties": {
     "type": {
       "type": "string",
-      "enum": ["file_search"],
+      "enum": [
+        "file_search"
+      ],
       "description": "The type of the tool. Always `file_search`.",
       "default": "file_search",
       "x-stainless-const": true
@@ -76,9 +78,16 @@
       "discriminator": {
         "propertyName": "type"
       }
+    },
+    "cache_control": {
+      "$ref": "./CacheControlParam.json",
+      "description": "Optional cache control hint. When present on the last tool, indicates that the tools block should be cached."
     }
   },
   "type": "object",
-  "required": ["type", "vector_store_ids"],
+  "required": [
+    "type",
+    "vector_store_ids"
+  ],
   "x-openai-class-name": "responses_common.api.params.tool_param.FileSearchToolParam"
 }

@@ -2,7 +2,9 @@
   "properties": {
     "type": {
       "type": "string",
-      "enum": ["code_interpreter"],
+      "enum": [
+        "code_interpreter"
+      ],
       "description": "The type of the tool. Always `code_interpreter`.",
       "default": "code_interpreter",
       "x-stainless-const": true
@@ -18,9 +20,16 @@
         }
       ],
       "description": "The container to run code in, either by ID or as an auto-created container configuration."
+    },
+    "cache_control": {
+      "$ref": "./CacheControlParam.json",
+      "description": "Optional cache control hint. When present on the last tool, indicates that the tools block should be cached."
     }
   },
   "type": "object",
-  "required": ["type", "container"],
+  "required": [
+    "type",
+    "container"
+  ],
   "x-openai-class-name": "responses_common.api.params.tool_param.CodeInterpreterToolParam"
 }

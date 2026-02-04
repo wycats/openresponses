@@ -31,12 +31,21 @@
     },
     "type": {
       "type": "string",
-      "enum": ["function"],
+      "enum": [
+        "function"
+      ],
       "default": "function",
       "x-stainless-const": true
+    },
+    "cache_control": {
+      "$ref": "./CacheControlParam.json",
+      "description": "Optional cache control hint. When present on the last tool, indicates that the tools block should be cached."
     }
   },
   "type": "object",
-  "required": ["name", "type"],
+  "required": [
+    "name",
+    "type"
+  ],
   "x-openai-class-name": "responses_common.api.params.tool_param.FunctionTool"
 }

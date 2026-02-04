@@ -2,7 +2,9 @@
   "properties": {
     "type": {
       "type": "string",
-      "enum": ["input_image"],
+      "enum": [
+        "input_image"
+      ],
       "description": "The type of the input item. Always `input_image`.",
       "default": "input_image",
       "x-stainless-const": true
@@ -32,10 +34,19 @@
     "detail": {
       "$ref": "./ImageDetail.json",
       "description": "The detail level of the image to be sent to the model. One of `high`, `low`, or `auto`. Defaults to `auto`."
+    },
+    "cache_control": {
+      "$ref": "./CacheControlParam.json",
+      "description": "Optional cache control hint. When present, indicates that content up to and including this part should be cached."
     }
   },
   "type": "object",
-  "required": ["type", "image_url", "file_id", "detail"],
+  "required": [
+    "type",
+    "image_url",
+    "file_id",
+    "detail"
+  ],
   "title": "Input image",
   "description": "An image input to the model. Learn about [image inputs](/docs/guides/vision).",
   "x-openai-class-name": "responses_common.api.resources.content_resource.InputImageContent"

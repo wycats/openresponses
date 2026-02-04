@@ -2,7 +2,9 @@
   "properties": {
     "type": {
       "type": "string",
-      "enum": ["input_text"],
+      "enum": [
+        "input_text"
+      ],
       "description": "The type of the input item. Always `input_text`.",
       "default": "input_text",
       "x-stainless-const": true
@@ -11,10 +13,17 @@
       "type": "string",
       "maxLength": 10485760,
       "description": "The text input to the model."
+    },
+    "cache_control": {
+      "$ref": "./CacheControlParam.json",
+      "description": "Optional cache control hint. When present, indicates that content up to and including this part should be cached."
     }
   },
   "type": "object",
-  "required": ["type", "text"],
+  "required": [
+    "type",
+    "text"
+  ],
   "title": "Input text",
   "description": "A text input to the model.",
   "x-openai-class-name": "responses_common.api.params.input_content_param.InputTextContentParam"
